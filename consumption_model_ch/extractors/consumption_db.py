@@ -99,7 +99,7 @@ class ConsumptionDbExtractor(object):
     def create_empty_brightway_df(cls, db_name):
         """Create dataframe for a new database in the Brightway format and add the necessary meta information."""
         df = pd.DataFrame([['cutoff', len(EXC_COLUMNS_DICT) + 3], ['database', db_name]], columns=list('AB'))
-        df = df.append(pd.Series(), ignore_index=True)
+        df = pd.concat([df, pd.DataFrame([[np.nan] * df.shape[1]], columns=df.columns)], ignore_index=True)
         return df
 
     @classmethod
@@ -225,7 +225,8 @@ class ConsumptionDbExtractor(object):
         """Append activity from row df_ind to the dataframe df in the brightway format."""
 
         # Append empty row
-        df = df.append(pd.Series(), ignore_index=True)
+        # df = df.append(pd.Series(), ignore_index=True)
+        df.loc[df.iloc[-1].name + 1, :] = np.nan
         # Extract activity information
         act_name = df_ind['Translated name']
         if 'Quantity code' in df_ind.index:
@@ -250,7 +251,7 @@ class ConsumptionDbExtractor(object):
             columns=list('AB'),
             index=np.arange(len_df, len_df + len(act_data))
         )
-        df = df.append(df_act, sort=False)
+        df = pd.concat([df,df_act], sort=False)
 
         return df, df_act
 
@@ -409,13 +410,13 @@ class ConsumptionDbExtractor(object):
             col_data = [dict_with_values[m] for m in col_names]
         else:
             col_data = col_names
-        df = df.append(pd.DataFrame([col_data], columns=col_excel_literal, index=[len(df)]), sort=False)
+        df = pd.concat([df,pd.DataFrame([col_data], columns=col_excel_literal, index=[len(df)])], sort=False)
         return df
 
     @classmethod
     def append_exchanges_column_names(cls, df):
         """Add column names for exchanges."""
-        df = df.append(pd.DataFrame(['Exchanges'], columns=['A'], index=[len(df)]), sort=False)
+        df = pd.concat([df, pd.DataFrame(['Exchanges'], columns=['A'], index=[len(df)])], sort=False)
         df = cls.append_exchanges_in_correct_columns(df, EXC_COLUMNS_DICT)
         return df
 

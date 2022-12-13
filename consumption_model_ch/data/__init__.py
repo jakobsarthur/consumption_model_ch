@@ -5,8 +5,9 @@ import json
 dirpath = Path(__file__).parent.resolve()
 
 
-def get_consumption_df():
-    filepath = dirpath / "es8b01452_si_002.xlsx"
+def get_consumption_df(lca_model_file):
+    # filepath = dirpath / "es8b01452_si_002.xlsx"
+    filepath = dirpath / "Consumption_model_update_151617.xlsx"
     df = pd.read_excel(filepath, sheet_name='Overview & LCA-Modeling', header=2)
     return df
 

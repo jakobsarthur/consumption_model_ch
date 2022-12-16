@@ -164,15 +164,27 @@ def add_consumption_all_hh(
     ausgaben.columns = columns_m
 
     # Compute total consumption
-    total_consumption = ausgaben.sum()
+    total_consumption = pd.DataFrame()
+    total_consumption['total'] = ausgaben.sum(axis=0)
+    total_consumption['std'] = ausgaben.std(axis=0)
+    total_consumption['min'] = ausgaben.min(axis=0)
+    total_consumption['max'] = ausgaben.max(axis=0)
     total_consumption = total_consumption.drop('haushaltid')
-    mengen = mengen.sum()
-    mengen = mengen.drop('haushaltid')
-    for i in range(len(mengen)):
-        try:
-            total_consumption[mengen.index[i]] = mengen.values[i]
-        except KeyError:
-            print(mengen.index[i])
+    total_mengen = pd.DataFrame()
+    total_mengen['total'] = mengen.sum(axis=0)
+    total_mengen['std'] = mengen.std(axis=0)
+    total_mengen['min'] = mengen.min(axis=0)
+    total_mengen['max'] = mengen.max(axis=0)
+    total_mengen = total_mengen.drop('haushaltid')
+
+    # not_in_ausgaben = []
+    for index in total_mengen.index:
+        if index in total_consumption.index:
+            total_consumption.loc[index] = total_mengen.loc[index]
+        # else:
+        #     not_in_ausgaben.append(index)
+            # print(total_mengen.iloc[i])
+
 
     # Add other useful info, eg number of households and number of people
     meta = pd.read_excel(path_beschrei, sheet_name='Tabellen', skiprows=8, usecols=[0, 1, 3, 4])
@@ -192,7 +204,7 @@ def add_consumption_all_hh(
 
     # Save total demand
     write_dir = Path(write_dir)
-    path_demand = write_dir / f"habe_totaldemands_{year_habe}.xlsx"
+    path_demand = write_dir / f"habe_totaldemands_with_std_{year_habe}.xlsx"
     total_consumption.to_excel(path_demand)
 
     # 3. Options
@@ -215,20 +227,25 @@ def add_consumption_all_hh(
 
     if option == 'aggregated':
         df = pd.read_excel(path_demand)
-        df.columns = ['code', 'amount']
+        n_households = int(df['n_households'][0])
+        df = df.drop(['n_households', 'n_people'], axis=1)
+        df.columns = ['code', 'amount', 'std', 'min', 'max']
         df.set_index('code', inplace=True)
-        n_households = int(df.loc['n_households', 'amount'])
-        # n_people     = int(df.loc['n_people', 'amount'])
-        df = df.drop(['n_households', 'n_people'])
         df = df.reset_index()
 
     elif option == 'disaggregated':
         path = dirpath / "functional_units" / 'habe20092011_hh_prepared_imputed.csv'
         df = pd.read_csv(path, low_memory=False)
         n_households = df.shape[0]
-        df = df.drop('haushaltid', axis=1).sum()
-        df = df.reset_index()
-        df.columns = ['code', 'amount']
+        df_new = pd.DataFrame()
+        df_new['amount'] = df.drop('haushaltid', axis=1).sum()
+        df_new['std'] = df.drop('haushaltid', axis=1).std()
+        df_new['min'] = df.drop('haushaltid', axis=1).min()
+        df_new['max'] = df.drop('haushaltid', axis=1).max()
+        df_new = df_new.reset_index()
+        df_new.columns = ['code', 'amount', 'std', 'min', 'max']
+        df = df_new.copy()
+        del df_new
 
     else:
         n_households = None
@@ -262,12 +279,20 @@ def add_consumption_all_hh(
         # if "mx" in code:
         #     factor = 12 # TODO?? divide by number of months
         if code in codes:
-            consumption_all.new_exchange(
+            exc = consumption_all.new_exchange(
                 input=(co.name, code),
                 amount=df.loc[i]['amount'] / factor,
                 type='technosphere',
                 has_uncertainty=True,
-            ).save()
+                loc=df.loc[i]['amount'] / factor,
+                scale=df.loc[i]['std']
+                # For future use, add the possibility to use real values as a distribution
+                # array=True,
+                # values = some_array
+            )
+            exc['uncertainty type'] = 3  # normal distribution for now
+            exc.save()  # I don't know how to set the uncertainty type directly in new_exchange so do it this way for now
+
         else:
             unlinked_codes.append(code)
 
@@ -292,6 +317,7 @@ def add_consumption_average_hh(consumption_all):
     for exc in consumption_average.exchanges():
         if exc['type'] != 'production':
             exc['amount'] /= n_households
+            exc['loc'] /= n_households
             exc.save()
 
 

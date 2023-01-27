@@ -234,7 +234,7 @@ def add_consumption_all_hh(
         df = df.reset_index()
 
     elif option == 'disaggregated':
-        path = dirpath / "functional_units" / 'habe20092011_hh_prepared_imputed.csv'
+        path = dirpath / "functional_units" / 'habe20152017_hh_prepared_imputed.csv'
         df = pd.read_csv(path, low_memory=False)
         n_households = df.shape[0]
         df_new = pd.DataFrame()
@@ -279,18 +279,24 @@ def add_consumption_all_hh(
         # if "mx" in code:
         #     factor = 12 # TODO?? divide by number of months
         if code in codes:
+            amount = df.loc[i]['amount'] / factor
+            std = df.loc[i]['std']
             exc = consumption_all.new_exchange(
                 input=(co.name, code),
-                amount=df.loc[i]['amount'] / factor,
+                amount=amount,
                 type='technosphere',
                 has_uncertainty=True,
-                loc=df.loc[i]['amount'] / factor,
-                scale=df.loc[i]['std']
+                loc=amount,
+                scale=std
                 # For future use, add the possibility to use real values as a distribution
                 # array=True,
                 # values = some_array
             )
-            exc['uncertainty type'] = 3  # normal distribution for now
+            if std==0:
+                uncertainty_type = 0  # unknown or undefined uncertainty
+            else:
+                uncertainty_type = 3  # normal distribution for now
+            exc['uncertainty type'] = uncertainty_type
             exc.save()  # I don't know how to set the uncertainty type directly in new_exchange so do it this way for now
 
         else:

@@ -53,12 +53,10 @@ def add_consumption_categories(co_name):
             act.save()
 
 
-def add_consumption_sectors(co_name, year_habe):
+def add_consumption_sectors(co_name, year_habe, cat_option='category_coarse'):
     """Add consumption sectors as separate activities in the consumption database."""
     co = bd.Database(co_name)
     demand_act = co.search(f"ch hh average consumption {year_habe}")[0]
-
-    cat_option = 'category_coarse'
 
     cat_unique = []
     for act in co:

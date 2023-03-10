@@ -50,6 +50,8 @@ def add_consumption_categories(co_name):
         if act['name'] == "Desktop computers" or act['name'] == "Portable computers" or act[
             'name'] == "Printers (incl. multifunctional printers)":
             act["category_coarse"] = "Durable goods"
+            act["category_middle"] = "Durable goods"
+            act["category_fine"] = "Durable goods"
             act.save()
 
 
@@ -105,7 +107,7 @@ def add_consumption_sectors(co_name, year_habe, cat_option='category_coarse'):
             pass
         new_act = co.new_activity(
             cat_of_interest,
-            name=f"{cat_of_interest} sector, years {year_habe}",
+            name=f"{cat_of_interest} sector, {cat_option}, years {year_habe}",
             location='CH',
             unit='1 month of consumption',
             comment=f'Average consumption of one household for the years {year_habe}',
@@ -120,7 +122,8 @@ def add_consumption_sectors(co_name, year_habe, cat_option='category_coarse'):
         ).save()
 
         for exc in demand_act.exchanges():
-            if exc.input.get('category_coarse') == cat_of_interest:
+            # if exc.input.get('category_coarse') == cat_of_interest:
+            if exc.input.get(cat_option) == cat_of_interest:
                 new_act.new_exchange(
                     input=(exc.input['database'], exc.input['code']),
                     amount=exc.amount,
@@ -463,6 +466,73 @@ def get_income_per_archetypes(dir_habe, fp_habe_clustering, year_habe):
     return dict_
 
 
+def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None, fp_habe_clustering=None):
+    """This function is based on the below function 'add_archetypes_consumption'
+    It takes a filepath to a csv file with all consumption per household and a file with the clustering data.
+    This clustering data is affectively a dataframe with all columns:
+    [HaushaltID	cluster_code 	n_households 	n_people 	gross_income]"""
+    print("Creating household cluster functional units")
+    if fp_demand_imputed is None:
+        fp_demand_imputed = dirpath / "functional_units" / "habe20152017_hh_prepared_imputed.csv"
+    if fp_habe_clustering is None:
+        fp_habe_clustering = './write_files/ccl_dev/households_clustering.csv'
+    co = bd.Database(co_name)
+    df = pd.read_csv(fp_demand_imputed, index_col=0)
+    hh_clusters = pd.read_csv(fp_habe_clustering, index_col=0)
+    household_clusters = hh_clusters['cluster_code'].unique()
+    hh_clusters.reset_index(inplace=True)  # reset the index so to keep 'HaushaltID'
+    hh_clusters.set_index('cluster_code', inplace=True)  # set index to cluster code/label
+    all_consumption_codes = [act['code'] for act in co]
+    # codes_to_ignore = [code for code in df.columns if code not in all_consumption_codes]
+    # print(codes_to_ignore)
+
+    # ppl_per_cluster_dict = {label: hh_clusters.loc[label, 'n_people'].mean() for label in household_clusters}
+    # income_per_cluster_dict = {label: hh_clusters.loc[label, 'gross_income'].mean() for label in household_clusters}
+    for cluster_label in tqdm(household_clusters):
+        # Create new activity
+        act_name = f"household cluster {cluster_label} consumption, years {year_habe}"
+        try:
+            co.get(act_name).delete()
+        except:
+            pass
+        archetype_act = co.new_activity(
+            act_name,
+            name=act_name,
+            location='CH',
+            unit='1 month of consumption',
+            # cluster_label_def=df_row['cluster_label_def'],
+            ppl_per_household=hh_clusters.loc[cluster_label, 'n_people'].mean(),
+            income_per_household=hh_clusters.loc[cluster_label, 'gross_income'].mean(),
+            n_households=hh_clusters.loc[cluster_label, 'n_households'][0]
+        )
+        archetype_act.save()
+        cluster_hh_ids = hh_clusters.loc[cluster_label, 'HaushaltID']
+        # Add exchanges to this activity
+        for code in df.columns:
+            if code in all_consumption_codes:
+                amount = df.loc[cluster_hh_ids, code].mean()
+                std = df.loc[cluster_hh_ids, code].std()
+                exc = archetype_act.new_exchange(
+                    input=(co.name, code),
+                    amount=amount,
+                    std=std,
+                    type='technosphere',
+                    has_uncertainty=True,
+                    loc=amount,
+                    scale=std
+                    # For future use, add the possibility to use real values as a distribution
+                    # array=True,
+                    # values = some_array
+                )
+                if std == 0:
+                    uncertainty_type = 0  # unknown or undefined uncertainty
+                else:
+                    uncertainty_type = 3  # normal distribution for now
+                exc['uncertainty type'] = uncertainty_type
+                exc.save()
+    return
+
+
 def add_archetypes_consumption(co_name, year_habe, fp_archetypes=None, fp_habe_clustering=None):
     print("Creating archetypes functional units")
     if fp_archetypes is None:
@@ -503,7 +573,6 @@ def add_archetypes_consumption(co_name, year_habe, fp_archetypes=None, fp_habe_c
                     type='technosphere',
                 ).save()
     return
-
 
 def get_archetypes_scores_per_month(co_name, year_habe, method, fp_archetypes_scores):
     """Get total LCIA scores for all archetypes for one month of consumption."""
@@ -553,11 +622,12 @@ def get_archetypes_scores_per_sector(co_name, year_habe, method, write_dir):
     return scores
 
 
-def get_demand_per_sector(act, sector):
+def get_demand_per_sector(act, sector, cat_option):
     sector_name = sector['name'][:-21]
     demands = {}
     for exc in act.exchanges():
-        if exc.input['category_coarse'] == sector_name:
+        # if exc.input['category_coarse'] == sector_name:
+        if exc.input[cat_option] == sector_name:
             demands[exc.input] = exc.amount
     assert len(demands) == len(list(sector.exchanges())) - 1
     return demands

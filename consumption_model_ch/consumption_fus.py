@@ -488,7 +488,7 @@ def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None
 
     # ppl_per_cluster_dict = {label: hh_clusters.loc[label, 'n_people'].mean() for label in household_clusters}
     # income_per_cluster_dict = {label: hh_clusters.loc[label, 'gross_income'].mean() for label in household_clusters}
-    for cluster_label in tqdm(household_clusters):
+    for cluster_label in household_clusters:
         # Create new activity
         act_name = f"household cluster {cluster_label} consumption, years {year_habe}"
         try:

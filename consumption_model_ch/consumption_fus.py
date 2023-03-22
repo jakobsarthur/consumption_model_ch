@@ -282,13 +282,17 @@ def add_consumption_all_hh(
         if code in codes:
             amount = df.loc[i]['amount'] / factor
             std = df.loc[i]['std']
+            min = df.loc[i]['min']
+            max = df.loc[i]['max']
             exc = consumption_all.new_exchange(
                 input=(co.name, code),
                 amount=amount,
                 type='technosphere',
                 has_uncertainty=True,
                 loc=amount,
-                scale=std
+                scale=std,
+                min=min,
+                max=max
                 # For future use, add the possibility to use real values as a distribution
                 # array=True,
                 # values = some_array
@@ -512,6 +516,8 @@ def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None
             if code in all_consumption_codes:
                 amount = df.loc[cluster_hh_ids, code].mean()
                 std = df.loc[cluster_hh_ids, code].std()
+                min = df.loc[cluster_hh_ids, code].min()
+                max = df.loc[cluster_hh_ids, code].max()
                 exc = archetype_act.new_exchange(
                     input=(co.name, code),
                     amount=amount,
@@ -519,7 +525,9 @@ def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None
                     type='technosphere',
                     has_uncertainty=True,
                     loc=amount,
-                    scale=std
+                    scale=std,
+                    min=min,
+                    max=max
                     # For future use, add the possibility to use real values as a distribution
                     # array=True,
                     # values = some_array

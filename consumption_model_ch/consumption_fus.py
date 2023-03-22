@@ -291,8 +291,8 @@ def add_consumption_all_hh(
                 has_uncertainty=True,
                 loc=amount,
                 scale=std,
-                min=min,
-                max=max
+                minimum=min,
+                maximum=max
                 # For future use, add the possibility to use real values as a distribution
                 # array=True,
                 # values = some_array
@@ -526,8 +526,8 @@ def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None
                     has_uncertainty=True,
                     loc=amount,
                     scale=std,
-                    min=min,
-                    max=max
+                    minimum=min,
+                    maximum=max
                     # For future use, add the possibility to use real values as a distribution
                     # array=True,
                     # values = some_array

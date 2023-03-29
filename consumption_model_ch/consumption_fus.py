@@ -131,13 +131,16 @@ def add_consumption_sectors(co_name, year_habe, cat_option='category_coarse'):
                 ).save()
 
 
-def add_consumption_all_hh(
+def add_consumption_hh(
         co_name,
         year_habe,
         dir_habe=None,
         option='disaggregated',
         write_dir="write_files",
 ):
+    """
+    Adds the average household consumption. No need to afterwards calculate the average.
+    """
     # 1. Get some metadata from the consumption database
     co = bd.Database(co_name)
     dir_habe = dir_habe or co.metadata['dir_habe']
@@ -252,7 +255,7 @@ def add_consumption_all_hh(
         n_households = None
 
     # 4. Add total inputs from Andi's model as swiss consumption activity
-    co_act_name = f'ch hh all consumption {option}, years {year_habe}'
+    co_act_name = f'ch hh average consumption {option}, years {year_habe}'
     try:
         co.get(co_act_name).delete()
     except:
@@ -276,33 +279,37 @@ def add_consumption_all_hh(
     unlinked_codes = []
     for i in range(len(df)):
         code = df.loc[i]['code']
-        factor = 1
-        # if "mx" in code:
-        #     factor = 12 # TODO?? divide by number of months
         if code in codes:
-            amount = df.loc[i]['amount'] / factor
+            amount = df.loc[i]['amount'] / n_households
             std = df.loc[i]['std']
             min = df.loc[i]['min']
             max = df.loc[i]['max']
-            exc = consumption_all.new_exchange(
-                input=(co.name, code),
-                amount=amount,
-                type='technosphere',
-                has_uncertainty=True,
-                loc=amount,
-                scale=std,
-                minimum=min,
-                maximum=max
-                # For future use, add the possibility to use real values as a distribution
-                # array=True,
-                # values = some_array
-            )
-            if std==0:
-                uncertainty_type = 0  # unknown or undefined uncertainty
+            if min==max==std==0:  # if no consumption skip the input otherwise there's a problem with the mc range later
+                continue
             else:
-                uncertainty_type = 3  # normal distribution for now
-            exc['uncertainty type'] = uncertainty_type
-            exc.save()  # I don't know how to set the uncertainty type directly in new_exchange so do it this way for now
+                exc = consumption_all.new_exchange(
+                    input=(co.name, code),
+                    amount=amount,
+                    type='technosphere',
+                    has_uncertainty=True,
+                    loc=np.log(amount**2/np.sqrt(amount**2+std**2)),
+                    scale=np.sqrt(np.log(1+std**2/amount**2)),
+                    sscale=std,
+                    minimum=min,
+                    maximum=max
+                    # For future use, add the possibility to use real values as a distribution
+                    # array=True,
+                    # values = some_array
+                )
+                if std==0:
+                    uncertainty_type = 0  # unknown or undefined uncertainty
+                    exc['maximum'] = np.NaN    # for some reason this goes wrong if min =  max = 0 even though uncertainty type = 0
+                    exc['minimum'] = np.NaN    # for some reason this goes wrong if min =  max = 0 even though uncertainty type = 0
+                    axc['loc'] = amount
+                else:
+                    uncertainty_type = 2  # lognormal distribution for now
+                exc['uncertainty_type'] = uncertainty_type
+                exc.save()  # I don't know how to set the uncertainty type directly in new_exchange so do it this way for now
 
         else:
             unlinked_codes.append(code)
@@ -312,24 +319,24 @@ def add_consumption_all_hh(
     # - but is a lot less than what Andi provided in his total demands. TODO not sure what this means anymore
 
 
-def add_consumption_average_hh(consumption_all):
-    """Add consumption activity for an average household."""
-    co_name = consumption_all.get('database')
-    option = consumption_all.get('agg_option')
-    year_habe = consumption_all.get('year_habe')
-    n_households = consumption_all.get('n_households')
-    co = bd.Database(co_name)
-    co_average_act_name = f'ch hh average consumption {option}, years {year_habe}'
-    try:
-        co.get(co_average_act_name).delete()
-    except:
-        pass
-    consumption_average = consumption_all.copy(co_average_act_name, name=co_average_act_name)
-    for exc in consumption_average.exchanges():
-        if exc['type'] != 'production':
-            exc['amount'] /= n_households
-            exc['loc'] /= n_households
-            exc.save()
+# def add_consumption_average_hh(consumption_all):
+#     """Add consumption activity for an average household."""
+#     co_name = consumption_all.get('database')
+#     option = consumption_all.get('agg_option')
+#     year_habe = consumption_all.get('year_habe')
+#     n_households = consumption_all.get('n_households')
+#     co = bd.Database(co_name)
+#     co_average_act_name = f'ch hh average consumption {option}, years {year_habe}'
+#     try:
+#         co.get(co_average_act_name).delete()
+#     except:
+#         pass
+#     consumption_average = consumption_all.copy(co_average_act_name, name=co_average_act_name)
+#     for exc in consumption_average.exchanges():
+#         if exc['type'] != 'production':
+#             exc['amount'] /= n_households
+#             exc['loc'] /= n_households
+#             exc.save()
 
 
 def add_consumption_activities(
@@ -518,26 +525,33 @@ def add_household_cluster_consumption(co_name, year_habe, fp_demand_imputed=None
                 std = df.loc[cluster_hh_ids, code].std()
                 min = df.loc[cluster_hh_ids, code].min()
                 max = df.loc[cluster_hh_ids, code].max()
-                exc = archetype_act.new_exchange(
-                    input=(co.name, code),
-                    amount=amount,
-                    std=std,
-                    type='technosphere',
-                    has_uncertainty=True,
-                    loc=amount,
-                    scale=std,
-                    minimum=min,
-                    maximum=max
-                    # For future use, add the possibility to use real values as a distribution
-                    # array=True,
-                    # values = some_array
-                )
-                if std == 0:
-                    uncertainty_type = 0  # unknown or undefined uncertainty
+                if min==max==std==0:  # if no consumption skip the input otherwise there's a problem with the mc range later
+                    continue
                 else:
-                    uncertainty_type = 3  # normal distribution for now
-                exc['uncertainty type'] = uncertainty_type
-                exc.save()
+                    exc = archetype_act.new_exchange(
+                        input=(co.name, code),
+                        amount=amount,
+                        std=std,
+                        type='technosphere',
+                        has_uncertainty=True,
+                        loc=np.log(amount**2/np.sqrt(amount**2+std**2)),
+                        scale=np.sqrt(np.log(1+std**2/amount**2)),
+                        sscale=std,
+                        minimum=min,
+                        maximum=max
+                        # For future use, add the possibility to use real values as a distribution
+                        # array=True,
+                        # values = some_array
+                    )
+                    if std == 0:
+                        uncertainty_type = 0  # unknown or undefined uncertainty
+                        exc['maximum'] = np.NaN    # for some reason this goes wrong if min =  max = 0 even though uncertainty type = 0
+                        exc['minimum'] = np.NaN    # for some reason this goes wrong if min =  max = 0 even though uncertainty type = 0
+                        axc['loc'] = amount
+                    else:
+                        uncertainty_type = 2  # normal distribution for now
+                    exc['uncertainty_type'] = uncertainty_type
+                    exc.save()
     return
 
 

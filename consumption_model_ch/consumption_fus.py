@@ -135,6 +135,7 @@ def add_consumption_hh(
         co_name,
         year_habe,
         dir_habe=None,
+        file_path_prepared_habe_data=None,
         option='disaggregated',
         write_dir="write_files",
 ):
@@ -238,7 +239,8 @@ def add_consumption_hh(
         df = df.reset_index()
 
     elif option == 'disaggregated':
-        path = dirpath / "functional_units" / 'habe20152017_hh_prepared_imputed.csv'
+        #path = dirpath / "functional_units" / 'habe20152017_hh_prepared_imputed.csv'
+        path = file_path_prepared_habe_data  # file path to imputed data file
         df = pd.read_csv(path, low_memory=False)
         n_households = df.shape[0]
         df_new = pd.DataFrame()
